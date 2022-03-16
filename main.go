@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"runtime"
 )
 
 func check(hostname string, fake_ips []net.IP, ch chan string) {
@@ -38,6 +39,7 @@ func scan(dict *os.File, target string) {
 		}
 	}
 
+    runtime.Goexit()
 	fmt.Println("\rDone\u001b[0J")
 }
 
@@ -59,4 +61,5 @@ func main() {
 	defer dict.Close()
 
 	scan(dict, *target)
+
 }
