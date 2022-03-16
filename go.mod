@@ -1,3 +1,3 @@
-module fagci/subdomain-enum
+module subdomain-enumerator
 
 go 1.17
