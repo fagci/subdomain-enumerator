@@ -10,6 +10,16 @@ import (
 	"sync"
 )
 
+func get_wildcard_ips(target string) []net.IP {
+	fake_sd := "f4k3sd"
+	fake_ips := []net.IP{}
+
+	if ips, err := net.LookupIP(fake_sd + "." + target); err == nil {
+		fake_ips = ips
+	}
+    return fake_ips
+}
+
 func check(hostname string, fake_ips []net.IP, wg *sync.WaitGroup) {
 	defer wg.Done()
 	fmt.Printf("\r[*] %s\u001b[0J", hostname)
@@ -21,12 +31,7 @@ func check(hostname string, fake_ips []net.IP, wg *sync.WaitGroup) {
 func scan(dict *os.File, target string) {
 	dict_scanner := bufio.NewScanner(dict)
 
-	fake_sd := "f4k3sd"
-	fake_ips := []net.IP{}
-
-	if ips, err := net.LookupIP(fake_sd + "." + target); err == nil {
-		fake_ips = ips
-	}
+    fake_ips := get_wildcard_ips(target)
 
 	var wg sync.WaitGroup
 
