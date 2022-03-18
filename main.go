@@ -7,14 +7,14 @@ import (
 	"net"
 	"os"
 	"reflect"
-	"runtime"
+	"sync"
 )
 
-func check(hostname string, fake_ips []net.IP, ch chan string) {
+func check(hostname string, fake_ips []net.IP, wg *sync.WaitGroup) {
+	defer wg.Done()
+	fmt.Printf("\r[*] %s\u001b[0J", hostname)
 	if ips, err := net.LookupIP(hostname); err == nil && !reflect.DeepEqual(fake_ips, ips) {
-		ch <- hostname
-	} else {
-		ch <- ""
+		fmt.Printf("\r[+] %s\u001b[0J\n", hostname)
 	}
 }
 
@@ -28,18 +28,15 @@ func scan(dict *os.File, target string) {
 		fake_ips = ips
 	}
 
-	ch := make(chan string, 128)
+	var wg sync.WaitGroup
 
 	for dict_scanner.Scan() {
 		hostname := dict_scanner.Text() + "." + target
-		fmt.Printf("\r[*] %s\u001b[0J", hostname)
-		go check(hostname, fake_ips, ch)
-		if sd := <-ch; sd != "" {
-			fmt.Printf("\r[+] %s\u001b[0J\n", sd)
-		}
+		wg.Add(1)
+		go check(hostname, fake_ips, &wg)
 	}
 
-    runtime.Goexit()
+	wg.Wait()
 	fmt.Println("\rDone\u001b[0J")
 }
 
@@ -61,5 +58,4 @@ func main() {
 	defer dict.Close()
 
 	scan(dict, *target)
-
 }
