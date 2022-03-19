@@ -1,9 +1,0 @@
-www
-mx
-mail
-test
-info
-private
-admin
-dev
-temp
