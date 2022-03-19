@@ -10,39 +10,76 @@ import (
 	"sync"
 )
 
-func get_wildcard_ips(target string) []net.IP {
-	fake_sd := "f4k3sd"
-	fake_ips := []net.IP{}
-
-	if ips, err := net.LookupIP(fake_sd + "." + target); err == nil {
-		fake_ips = ips
-	}
-    return fake_ips
+type Result struct {
+	Hostname string
+	Resolved bool
+	IPs      []net.IP
 }
 
-func check(hostname string, fake_ips []net.IP, wg *sync.WaitGroup) {
-	defer wg.Done()
-	fmt.Printf("\r[*] %s\u001b[0J", hostname)
-	if ips, err := net.LookupIP(hostname); err == nil && !reflect.DeepEqual(fake_ips, ips) {
-		fmt.Printf("\r[+] %s\u001b[0J\n", hostname)
+type Enumerator struct {
+	Target    string
+	DictPath  string
+	waitGroup sync.WaitGroup
+	ch        chan Result
+	fakeIPs   []net.IP
+	dict      *os.File
+}
+
+func (e *Enumerator) GetWildcardIPs() []net.IP {
+	fake_hostname := "f4k3sd." + e.Target
+
+	if ips, err := net.LookupIP(fake_hostname); err == nil {
+		e.fakeIPs = ips
+		return ips
+	}
+
+	return []net.IP{}
+}
+
+func (e *Enumerator) Check(hostname string) {
+	defer e.waitGroup.Done()
+	if ips, err := net.LookupIP(hostname); err == nil && !reflect.DeepEqual(e.fakeIPs, ips) {
+		e.ch <- Result{Hostname: hostname, Resolved: true, IPs: ips}
+	} else {
+		e.ch <- Result{Hostname: hostname, Resolved: false}
 	}
 }
 
-func scan(dict *os.File, target string) {
-	dict_scanner := bufio.NewScanner(dict)
+func (e *Enumerator) OpenDict() {
+	dict, err := os.Open(e.DictPath)
+	if err != nil {
+		fmt.Printf("Cannot open dict. (%s)\n", err)
+		return
+	}
+	e.dict = dict
+}
 
-    fake_ips := get_wildcard_ips(target)
+func (e *Enumerator) Scan() {
+	e.OpenDict()
+	e.GetWildcardIPs()
+	defer e.dict.Close()
+	defer close(e.ch)
 
-	var wg sync.WaitGroup
-
-	for dict_scanner.Scan() {
-		hostname := dict_scanner.Text() + "." + target
-		wg.Add(1)
-		go check(hostname, fake_ips, &wg)
+	dictScanner := bufio.NewScanner(e.dict)
+	for dictScanner.Scan() {
+		hostname := dictScanner.Text() + "." + e.Target
+		e.waitGroup.Add(1)
+		go e.Check(hostname)
 	}
 
-	wg.Wait()
-	fmt.Println("\rDone\u001b[0J")
+	e.waitGroup.Wait()
+}
+
+func (e *Enumerator) GetResults() <-chan Result {
+	return e.ch
+}
+
+func NewEnumerator(target string, dict_path string) Enumerator {
+	return Enumerator{
+		Target:   target,
+		DictPath: dict_path,
+		ch:       make(chan Result, 16),
+	}
 }
 
 func main() {
@@ -55,12 +92,16 @@ func main() {
 		return
 	}
 
-	dict, err := os.Open(*dict_path)
-	if err != nil {
-		fmt.Printf("Cannot open dict. (%s)\n", err)
-		return
-	}
-	defer dict.Close()
+	enumerator := NewEnumerator(*target, *dict_path)
 
-	scan(dict, *target)
+	go enumerator.Scan()
+
+	for result := range enumerator.GetResults() {
+		fmt.Printf("\r[*] %s\u001b[0J", result.Hostname)
+		if result.Resolved {
+			fmt.Printf("\r[+] %s\u001b[0J\n", result.Hostname)
+		}
+	}
+
+	fmt.Println("\rDone\u001b[0J")
 }
