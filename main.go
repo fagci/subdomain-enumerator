@@ -30,7 +30,6 @@ func (e *Enumerator) GetWildcardIPs() []net.IP {
 
 	if ips, err := net.LookupIP(fake_hostname); err == nil {
 		e.fakeIPs = ips
-		return e.fakeIPs
 	}
 
 	return e.fakeIPs
