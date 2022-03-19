@@ -47,8 +47,8 @@ func (e *Enumerator) Check(hostname string) {
 func (e *Enumerator) OpenDict() {
 	dict, err := os.Open(e.DictPath)
 	if err != nil {
-		fmt.Printf("Cannot open dict. (%s)\n", err)
-		return
+		fmt.Printf("Error: %s\n", err)
+		os.Exit(1)
 	}
 	e.dict = dict
 }
