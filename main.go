@@ -10,6 +10,8 @@ import (
 	"sync"
 )
 
+var dictPath, target string
+
 type Result struct {
 	Hostname string
 	Resolved bool
@@ -26,9 +28,9 @@ type Enumerator struct {
 }
 
 func (e *Enumerator) GetWildcardIPs() []net.IP {
-	fake_hostname := "f4k3sd." + e.Target
+	fakeHostname := "f4k3sd." + e.Target
 
-	if ips, err := net.LookupIP(fake_hostname); err == nil {
+	if ips, err := net.LookupIP(fakeHostname); err == nil {
 		e.fakeIPs = ips
 	}
 
@@ -37,10 +39,11 @@ func (e *Enumerator) GetWildcardIPs() []net.IP {
 
 func (e *Enumerator) Check(hostname string) {
 	defer e.waitGroup.Done()
-	if ips, err := net.LookupIP(hostname); err == nil && !reflect.DeepEqual(e.fakeIPs, ips) {
-		e.ch <- Result{Hostname: hostname, Resolved: true, IPs: ips}
-	} else {
-		e.ch <- Result{Hostname: hostname, Resolved: false}
+	ips, err := net.LookupIP(hostname)
+	e.ch <- Result{
+		Hostname: hostname,
+		Resolved: err == nil && !reflect.DeepEqual(e.fakeIPs, ips),
+		IPs:      ips,
 	}
 }
 
@@ -69,21 +72,24 @@ func (e *Enumerator) Scan() {
 	e.waitGroup.Wait()
 }
 
-func (e *Enumerator) GetResults() <-chan Result {
+func (e *Enumerator) Results() <-chan Result {
 	return e.ch
 }
 
-func NewEnumerator(target string, dict_path string) Enumerator {
+func NewEnumerator(target string, dictPath string) Enumerator {
 	return Enumerator{
 		Target:   target,
-		DictPath: dict_path,
-		ch:       make(chan Result, 16),
+		DictPath: dictPath,
+		ch:       make(chan Result),
 	}
 }
 
+func init() {
+	flag.StringVar(&dictPath, "d", "", "subdomains dictionary file")
+	flag.StringVar(&target, "t", "", "target domain")
+}
+
 func main() {
-	dict_path := flag.String("d", "", "subdomains dictionary file")
-	target := flag.String("t", "", "target domain")
 	flag.Parse()
 
 	if flag.NFlag() < 2 {
@@ -91,11 +97,11 @@ func main() {
 		return
 	}
 
-	enumerator := NewEnumerator(*target, *dict_path)
+	enumerator := NewEnumerator(target, dictPath)
 
 	go enumerator.Scan()
 
-	for result := range enumerator.GetResults() {
+	for result := range enumerator.Results() {
 		fmt.Printf("\r[*] %s\u001b[0J", result.Hostname)
 		if result.Resolved {
 			fmt.Printf("\r[+] %s\u001b[0J\n", result.Hostname)
